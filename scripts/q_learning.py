@@ -62,22 +62,25 @@ class QLearning(object):
         self.action_was_pubbed = 0
         self.best_policy = []
 
-
     def train_q_matrix(self):
         t = 0
         is_converged = 0
-        previous_state = np.asarray([0, 0, 0])
-        previous_q_value = -1
+        current_state = np.asarray([0, 0, 0])
+        current_q_value = -1
         epsilon = 1e-10
+
+        num_iterations_unchanged = 0 #no of iterations to determine q matrix convergence 
+        upper_bound_convergence = 50 
         while not is_converged:
             ## Selecting a valid action
 
-            # get index of previous state
-            previous_state_idx = np.where((self.states_array == previous_state).all(axis=1))
-            previous_state_idx = previous_state_idx[0][0]
-            # search action matrix for a good set of actions given our previous state
-            potential_actions = self.action_matrix[previous_state_idx,:]
+            # get index of current state
+            current_state_idx = np.where((self.states_array == current_state).all(axis=1))
+            current_state_idx = current_state_idx[0][0]
+            # search action matrix for a good set of actions given our current state
+            potential_actions = self.action_matrix[current_state_idx,:]
             valid_actions = np.where(potential_actions >= 0)[0]
+
             next_action = np.random.choice(valid_actions)
             
             action_dict = self.actions[next_action]
@@ -95,67 +98,69 @@ class QLearning(object):
             reward_after_action = self.reward
             gamma = 0.1
 
-            # previous state refers to state t, current state refers to state t+1
-            current_state = previous_state.copy()
+            # current state refers to state t, future state refers to state t+1
+            future_state = current_state.copy()
             # figure out our new state
             if robot_obj == 'pink':
-                current_state[0] = to_tag_id 
+                future_state[0] = to_tag_id 
             elif robot_obj == 'blue':
-                current_state[1] = to_tag_id
+                future_state[1] = to_tag_id
             elif robot_obj == 'green':
-                current_state[2] = to_tag_id
-            current_state_idx = np.where((self.states_array == current_state).all(axis=1))
-            current_state_idx = current_state_idx[0][0]
-            max_Q_candidates = self.Q[current_state_idx,:]
+                future_state[2] = to_tag_id
+            future_state_idx = np.where((self.states_array == future_state).all(axis=1))
+            future_state_idx = future_state_idx[0][0]
+            max_Q_candidates = self.Q[future_state_idx,:]
             max_Q = np.max(max_Q_candidates)
 
             # calculate q_value and update the Q matrix
             q_value = reward_after_action + (gamma * max_Q)
-            self.Q[previous_state_idx, next_action] = q_value
+            self.Q[current_state_idx, next_action] = q_value
             Q_matrix_msg = QMatrix(self.Q)
             self.q_matrix_pub.publish(Q_matrix_msg)
 
             # checking for convergence 
-            if t > 1:
-                if abs(q_value - previous_q_value) < epsilon: 
-                    is_converged = 1
+
+            #checking if the q value has not changed in n iterations 
+            if abs(q_value - current_q_value) < epsilon: 
+                num_iterations_unchanged += 1
+            else:
+                num_iterations_unchanged = 0 
+            
+            # the q matrix has converged
+            if(num_iterations_unchanged == upper_bound_convergence):
+                is_converged = 1
+                    
 
             # updating stuff for the next iteration!
-            previous_q_value = q_value
-            previous_state = current_state
+            current_q_value = q_value
+            current_state = future_state
+            #checking if an object is in front of a tag (reset current state to 0)
+            future_actions = self.action_matrix[future_state_idx,:]
+            valid_future_actions = np.where(potential_actions >= 0)[0]
+            if(valid_future_actions.size == 0):
+                current_state = np.asarray([0, 0, 0])
             self.action_was_pubbed = 0
             t = t + 1
 
     def find_best_policy(self):
-        # TODO: finish writing this function
         # find best actions to take based on max value
         # at the beginning we want to start at the origin for all objects (state = 0,0,0)
-        goal_state_idx = 0 # TODO find the right goal state
+        
+        # initializing current state as the origin
+        current_state = np.asarray([0,0,0])
+        reached_final_state = 0
 
-        previous_state = np.asarray([0,0,0])
-        while current_state_idx != goal_state_idx:
-            # get index of previous state
-            previous_state_idx = np.where((self.states_array == previous_state).all(axis=1))
-            previous_state_idx = previous_state_idx[0][0]
+        while not reached_final_state:
+            # get index of current state
+            current_state_idx = np.where((self.states_array == current_state).all(axis=1))[0][0]
 
-            q_vals_for_initial_state = self.Q[0,:]
-            best_action = np.argmax(q_vals_for_initial_state)
+            q_vals_current_state = self.Q[current_state_idx,:]
+            best_action = np.argmax(q_vals_current_state)
+            self.best_policy.append(best_action)
 
-            #storing current state
-
-            current_state = previous_state.copy()
-            current_state_idx = np.where((self.states_array == current_state).all(axis=1))
-            current_state_idx = current_state_idx[0][0]
-
-
-
-
-
-
-
-        self.policy.append(best_action)
-        #self.best_policy = ________
-
+            if np.min(q_vals_current_state) == np.max(q_vals_current_state):
+                # all values are equal for the q_vals, there is nowhere else to jump to next
+                reached_final_state = 1
 
     def receive_reward(self, data):
         if self.action_was_pubbed:
@@ -164,12 +169,15 @@ class QLearning(object):
     def save_q_matrix(self):
         # TODO: You'll want to save your q_matrix to a file once it is done to
         # avoid retraining
+        np.savetxt('converged_q_matrix.csv', self.Q, delimiter=",")
         return
     
     def run(self):
         self.train_q_matrix()
         self.find_best_policy()
+        self.save_q_matrix()
 
 
 if __name__ == "__main__":
     node = QLearning()
+    node.run()
