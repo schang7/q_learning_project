@@ -70,19 +70,21 @@ class QLearning(object):
         epsilon = 1e-10
 
         num_iterations_unchanged = 0 #no of iterations to determine q matrix convergence 
-        upper_bound_convergence = 50 
+        upper_bound_convergence = 1000 
         while not is_converged:
             ## Selecting a valid action
 
             # get index of current state
             current_state_idx = np.where((self.states_array == current_state).all(axis=1))
             current_state_idx = current_state_idx[0][0]
+            print('current state idx', current_state_idx)
             # search action matrix for a good set of actions given our current state
-            potential_actions = self.action_matrix[current_state_idx,:]
-            valid_actions = np.where(potential_actions >= 0)[0]
-
-            next_action = np.random.choice(valid_actions)
-            
+            potential_next_states = self.action_matrix[current_state_idx,:]
+            valid_next_states = np.where(potential_next_states >= 0)[0]
+            #print(valid_next_states)
+            next_state_idx = np.random.choice(valid_next_states)
+            next_action = int(self.action_matrix[current_state_idx,next_state_idx])
+            #print('next_action', next_action)
             action_dict = self.actions[next_action]
             robot_obj = action_dict["object"]
             to_tag_id = action_dict["tag"]
@@ -91,35 +93,37 @@ class QLearning(object):
             action_msg = RobotMoveObjectToTag(robot_object=robot_obj, tag_id=to_tag_id)
             self.action_pub.publish(action_msg)
             self.action_was_pubbed = 1
-
             rospy.sleep(1)
 
             # reward was stored into self.reward, due to the callback function
             reward_after_action = self.reward
+            #print('reward: ', self.reward)
             gamma = 0.1
+
 
             # current state refers to state t, future state refers to state t+1
             future_state = current_state.copy()
             # figure out our new state
             if robot_obj == 'pink':
                 future_state[0] = to_tag_id 
-            elif robot_obj == 'blue':
-                future_state[1] = to_tag_id
             elif robot_obj == 'green':
+                future_state[1] = to_tag_id
+            elif robot_obj == 'blue':
                 future_state[2] = to_tag_id
             future_state_idx = np.where((self.states_array == future_state).all(axis=1))
             future_state_idx = future_state_idx[0][0]
+            #print('future states ', future_state_idx)
             max_Q_candidates = self.Q[future_state_idx,:]
+            
             max_Q = np.max(max_Q_candidates)
-
+            #print('max Q', max_Q)
             # calculate q_value and update the Q matrix
             q_value = reward_after_action + (gamma * max_Q)
             self.Q[current_state_idx, next_action] = q_value
-            Q_matrix_msg = QMatrix(self.Q)
+            Q_matrix_msg = QMatrix(q_matrix = self.Q)
             self.q_matrix_pub.publish(Q_matrix_msg)
 
             # checking for convergence 
-
             #checking if the q value has not changed in n iterations 
             if abs(q_value - current_q_value) < epsilon: 
                 num_iterations_unchanged += 1
@@ -130,14 +134,17 @@ class QLearning(object):
             if(num_iterations_unchanged == upper_bound_convergence):
                 is_converged = 1
                     
-
+            #print(future_state_idx)
+            #if reward_after_action == 100:
+            #    print("reward was 100!")
+            #    break
             # updating stuff for the next iteration!
             current_q_value = q_value
             current_state = future_state
-            #checking if an object is in front of a tag (reset current state to 0)
-            future_actions = self.action_matrix[future_state_idx,:]
-            valid_future_actions = np.where(potential_actions >= 0)[0]
-            if(valid_future_actions.size == 0):
+            #checking if all objects is in front of a tag (reset current state to 0)
+            future_states = self.action_matrix[future_state_idx,:]
+            valid_future_states = np.where(future_states >= 0)[0]
+            if(valid_future_states.size == 0):
                 current_state = np.asarray([0, 0, 0])
             self.action_was_pubbed = 0
             t = t + 1
@@ -173,6 +180,7 @@ class QLearning(object):
         return
     
     def run(self):
+        print('it run')
         self.train_q_matrix()
         self.find_best_policy()
         self.save_q_matrix()
