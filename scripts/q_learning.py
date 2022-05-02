@@ -67,17 +67,19 @@ class QLearning(object):
         is_converged = 0
         current_state = np.asarray([0, 0, 0])
         current_q_value = -1
-        epsilon = 1e-10
+        epsilon = 1e-5
 
         num_iterations_unchanged = 0 #no of iterations to determine q matrix convergence 
-        upper_bound_convergence = 1000 
+        upper_bound_convergence = 100 
         while not is_converged:
+            print('iteration: ', t)
+            print('num_iterations_unchanged: ', num_iterations_unchanged)
             ## Selecting a valid action
 
             # get index of current state
             current_state_idx = np.where((self.states_array == current_state).all(axis=1))
             current_state_idx = current_state_idx[0][0]
-            print('current state idx', current_state_idx)
+            #print('current state idx', current_state_idx)
             # search action matrix for a good set of actions given our current state
             potential_next_states = self.action_matrix[current_state_idx,:]
             valid_next_states = np.where(potential_next_states >= 0)[0]
@@ -133,6 +135,7 @@ class QLearning(object):
             # the q matrix has converged
             if(num_iterations_unchanged == upper_bound_convergence):
                 is_converged = 1
+                print('it converged')
                     
             #print(future_state_idx)
             #if reward_after_action == 100:
@@ -168,6 +171,7 @@ class QLearning(object):
             if np.min(q_vals_current_state) == np.max(q_vals_current_state):
                 # all values are equal for the q_vals, there is nowhere else to jump to next
                 reached_final_state = 1
+                print(self.best_policy)
 
     def receive_reward(self, data):
         if self.action_was_pubbed:
