@@ -1,1 +1,6 @@
-<!-- TODO -->
+<launch>
+
+    <node name="turtlebot3_phantom_movement" pkg="q_learning_project" type="phantom_robot_movement.py" respawn="true" />
+    <node name="q_learning" pkg="q_learning_project" type="q_learning.py" respawn="true" />
+
+</launch>
