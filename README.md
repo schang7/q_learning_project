@@ -1,5 +1,28 @@
 # q_learning_project
 
+Writeup
+
+Objectives description, high-level description, Q-learning algorithm description
+
+Objectives description (2-3 sentences): Describe the goal of this project.:
+To implement a Q-Learning algorithm that gives the robot the ability to organize objects in a given environment. The goal of this intermediate deliverable specifically is to train our Q-Matrix using reinforcement learning, and stopping when we have a converged Q-matrix that will be used to guide the robot to execute the best set of actions to perform the object organization goal in the 2nd part of the project. 
+
+High-level description (1 paragraph): At a high-level, describe how you used reinforcement learning to solve the task of determining which colored objects belong in front of each AR tag.:
+  We used reinforcement learning in the Q-learning algorithm. For each iteration of the Q-learning algorithm, we randomly chose an action of moving one of three colored objects (pink, blue, and green) to one of three AR tags. After performing this action, we received a reward that would result from placing the objects in the post-action state (which was either 0 or +100; +100 corresponds to when all three objects are all placed in front of the correct tags). We used this reward to calculate the q-value using the Bellman Equation. In this equation, we set our learning rate to 1 and our discount factor to 0.1. We then updated the Q-matrix with this calculated q-value. We determined convergence of the q matrix by a rule that compared the difference between consecutive q-values, and if the difference was negligible for a certain number of iterations, we determined that the Q Matrix had converged. This converged Q-matrix allows us to use reinforcement learning to determine the best set of actions the robot should take to perform a goal because we will ultimately use it to find the best set of actions (a best policy) that maximizes the reward obtained.
+  
+Q-learning algorithm description: Describe how you accomplished each of the following components of the Q-learning algorithm in 1-3 sentences, and also describe what functions / sections of the code executed each of these components (1-3 sentences per function / portion of code):
+1) Selecting and executing actions for the robot (or phantom robot) to take
+We took the current state at the beginning of the q-learning iteration and found all valid potential next states that could be attained (given the current state) using the action_matrix. We then randomly selected one state from this array of potential next valid states, and found the corresponding action that would get us to that state. If there are no valid next states to take from the current state (i.e. all three objects are in front of a tag), then there are no valid states and we reset the current state to be 0 (corresponding to when all three objects are at the origin). 
+  Location: Lines 85-103, 168-172 (for going back to origin if we’ve reached an end state) 
+2) Updating the Q-matrix:
+In order to update the Q matrix, we first found the Q matrix entries corresponding to all actions (columns) given the chosen future state (row), which is stored in max_Q_Candidates. We then took the max Q-value from all these entries (max_Q). We then used this as the Q(S_t+1, at) input in the Bellman Equation, and along with the reward we obtained from performing the action and our discount factor parameter, we calculated the Q value of (S_t, a_t). We then updated the corresponding element of the Q matrix to this value. 
+  Location: Lines 123-136 
+3) Determining when to stop iterating through the Q-learning algorithm
+We determined our q matrix had converged by comparing the calculated q values in consecutive iterations. (abs(q_value-current_q_value)). If the difference between these q values was less than some tolerance level, n times consecutively, then we determined that the Q matrix was not being updated significantly and so it had converged. In testing for optimizing our parameters, we found that in our best iteration, the q matrix converged in 6700 iterations, after the q_value remained unchanged for 60 iterations total. Thus, we set our upper bound for the number of consecutive iterations the q matrix should remain unchanged for, to be 60. This determined that our q matrix converged, and we tested this by manually confirming that the best policy in the converged q-matrix csv file led to the goal state.
+  Location: Lines 155-162 
+
+
+
 Implementation plan:
 The names of your team members:
 Suha Chang
