@@ -3,7 +3,7 @@
 import rospy
 import numpy as np
 import os
-from q_learning_project.msg import RobotMoveObjectToTag, QLearningReward, QMatrix
+from q_learning_project.msg import RobotMoveObjectToTag, QLearningReward, QMatrix, QMatrixRow
 
 # Path of directory on where this file is located
 path_prefix = os.path.dirname(__file__) + "/action_states/"
@@ -58,42 +58,41 @@ class QLearning(object):
         # ROS subscriber to get the reward
         self.reward_sub = rospy.Subscriber("/q_learning/reward",  QLearningReward, self.receive_reward)
 
-        # initializing different values
+        # initializing reward, indicator that action was published, and policy for later updating
         self.reward = 0
         self.action_was_pubbed = 0
         self.best_policy = []
 
     def train_q_matrix(self):
         
-        #various local variables to act as counters for number of iterations, whehter the q matrix has converged or not, and to hold previous states and q values 
-        t = 0
+        #various local variables to act as counters for number of iterations, 
+        # whether the q matrix has converged or not, and to hold previous states and q values 
+        t = 0 # iteration number
         is_converged = 0
-        current_state = np.asarray([0, 0, 0])
+        current_state = np.asarray([0, 0, 0]) # all objects start at origin
         current_q_value = -1
         #tolerance level. This was adjusted as a method of optimizing our parameters. 
         epsilon = 1e-1
 
-        num_iterations_unchanged = 0 #no of iterations to determine q matrix convergence 
-        #when num_iterations_unchanged reached our designated upper bound, we decided the matrix has converged 
+        num_iterations_unchanged = 0 # no. of iterations to determine q matrix convergence 
+        #when num_iterations_unchanged in a row reaches  our designated upper bound, we decided the matrix has converged 
         upper_bound_convergence = 60
-        while not is_converged:
-            print('iteration: ', t)
-            print('num_iterations_unchanged: ', num_iterations_unchanged)
-            ## Selecting a valid action
 
+        # iterate through q-learning algorithm
+        while not is_converged:
+            ## Selecting a valid action
             # get index of current state
-            current_state_idx = np.where((self.states_array == current_state).all(axis=1))
-            current_state_idx = current_state_idx[0][0]
+            current_state_idx = np.where((self.states_array == current_state).all(axis=1))[0][0]
             
             # search action matrix for a good set of actions given our current state
             potential_next_states = self.action_matrix[current_state_idx,:]
-            #valid next states are those elements of the action matrix where the action is >= 0 
+            #valid next states are those elements of the action matrix where the action is >= 0 (not invalid)
             valid_next_states = np.where(potential_next_states >= 0)[0]
-            
+            # randomly choose an action from those valid states
             next_state_idx = np.random.choice(valid_next_states)
-            #indexing into the action matrix appropriately 
+
+            #indexing into the action_matrix and actions appropriately to get the object to move and tag to move it to
             next_action = int(self.action_matrix[current_state_idx,next_state_idx])
-            
             action_dict = self.actions[next_action]
             robot_obj = action_dict["object"]
             to_tag_id = action_dict["tag"]
@@ -101,16 +100,15 @@ class QLearning(object):
             # publish action
             action_msg = RobotMoveObjectToTag(robot_object=robot_obj, tag_id=to_tag_id)
             self.action_pub.publish(action_msg)
-            
             self.action_was_pubbed = 1
-            #sleeping to ensure the reward is received accurately. We played around with the rospy sleep parameter as a method to optimize our parameters
-            #and try and converge our q matrix quicker. 
-            #We settled on 1.5, as any number lower was not receiving our reward correctly. 
+
+            # Sleeping to ensure the reward is received accurately. We played around with the rospy 
+            # sleep parameter as a method to optimize our parameters and try to converge our q matrix quicker. 
+            # We settled on 1.5, as any number lower did not give enough time to receive the correct reward from the subscriber 
             rospy.sleep(1.5)
-            #discount factor set to what we used in class 
+            
+            # discount factor set to what we used in class 
             gamma = 0.1
-
-
             # current state refers to state t, future state refers to state t+1
             future_state = current_state.copy()
             # figure out our new state
@@ -122,7 +120,6 @@ class QLearning(object):
                 future_state[2] = to_tag_id
             future_state_idx = np.where((self.states_array == future_state).all(axis=1))
             future_state_idx = future_state_idx[0][0]
-            print('future state: ', future_state_idx)
             #the candidates for the q value would be all members of the QMatrix in the row that corresponds to our future state index 
             max_Q_candidates = self.Q[future_state_idx,:]
             
@@ -138,15 +135,23 @@ class QLearning(object):
             #updating the Q Matrix 
             self.Q[current_state_idx, next_action] = q_value
             
-            #publishing the Q Matix 
-            Q_matrix_msg = QMatrix(q_matrix = self.Q)
+            #publishing the Q Matrix, which requires transformation to be of type QMatrixRow
+            # initializing a new empty list to make QMatrixRow
+            updated_q_matrix = []
+            # looping over each row of the Q matrix
+            for i in range(self.Q.shape[0]):
+                # converting each row to type QMatrixRow
+                converted_row = self.Q[i,:].astype(np.int16)
+                new_row = QMatrixRow(converted_row.tolist())
+                updated_q_matrix.append(new_row)
+            Q_matrix_msg = QMatrix(q_matrix = updated_q_matrix)
             self.q_matrix_pub.publish(Q_matrix_msg)
 
-            # checking for convergence 
-            #checking if the difference between consecutive q values has been negligible for a certain number of iterations 
-            #we saw that our q matrix converged at 6700 iterations, and the q values had not differed significantly for 60 iterations consecutively. 
-            #thus we set our upper bound of convergence to 60, to determine if our q matrix has converged.
-            #We also checked visually the converged q matrix, and confirmed that it was giving us the correct goal state/ policy. 
+ 
+            # checking if the difference between consecutive q values has been negligible for a certain number of iterations. 
+            #we saw that our q matrix converged at 6700 iterations, and the q values had not differed significantly 
+            # for 60 iterations consecutively. thus we set our upper bound of convergence to 60, to determine if our q matrix has converged.
+            # We also checked visually the converged q matrix, and confirmed that it was giving us the correct goal state/ policy. 
             if abs(q_value - current_q_value) < epsilon: 
                 num_iterations_unchanged += 1
             else:
@@ -156,10 +161,11 @@ class QLearning(object):
             if(num_iterations_unchanged == upper_bound_convergence):
                 is_converged = 1
                     
-            # updating stuff for the next iteration!
+            # updating variables for the next iteration!
             current_q_value = q_value
             current_state = future_state
-            #checking if all objects is in front of a tag (reset current state to 0)
+
+            #checking if all objects is in front of a tag. if so, reset current state to 0
             future_states = self.action_matrix[future_state_idx,:]
             valid_future_states = np.where(future_states >= 0)[0]
             if(valid_future_states.size == 0):
@@ -187,17 +193,20 @@ class QLearning(object):
             if np.min(q_vals_current_state) == np.max(q_vals_current_state):
                 # all values are equal for the q_vals, there is nowhere else to jump to next
                 reached_final_state = 1
-                print(self.best_policy)
 
     def receive_reward(self, data):
+        # A callback function that saves the reward that is subscribed to
+        # every time an action is pubbed
         if self.action_was_pubbed:
             self.reward = data.reward
 
     def save_q_matrix(self):
+        # A function that saves the converged Q-matrix into a csv file
         np.savetxt('converged_q_matrix.csv', self.Q, delimiter=",")
         return
     
     def run(self):
+        # Running the code for training and saving the Q-matrix
         self.train_q_matrix()
         self.save_q_matrix()
 
