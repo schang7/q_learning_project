@@ -1,6 +1,6 @@
 <launch>
 
-    <node name="turtlebot3_phantom_movement" pkg="q_learning_project" type="phantom_robot_movement.py" respawn="true" />
-    <node name="q_learning" pkg="q_learning_project" type="q_learning.py" respawn="true" />
+    <node name="virtual_reset_world_q_learning" pkg="q_learning_project" type="virtual_reset_world.py" respawn="true" />
+    <node name="q_learning" pkg="q_learning_project" type="q_learning.py" cwd="node" />
 
 </launch>

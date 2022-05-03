@@ -47,7 +47,7 @@ class QLearning(object):
         self.states_array = np.asarray(self.states)
 
         self.Q = np.zeros((len(self.states), len(self.actions)))
-
+        
         # ROS publisher to publish action 
         self.action_pub = rospy.Publisher("/q_learning/robot_action", RobotMoveObjectToTag, queue_size=10)
 
@@ -67,10 +67,10 @@ class QLearning(object):
         is_converged = 0
         current_state = np.asarray([0, 0, 0])
         current_q_value = -1
-        epsilon = 1e-5
+        epsilon = 1e-1
 
         num_iterations_unchanged = 0 #no of iterations to determine q matrix convergence 
-        upper_bound_convergence = 100 
+        upper_bound_convergence = 60
         while not is_converged:
             print('iteration: ', t)
             print('num_iterations_unchanged: ', num_iterations_unchanged)
@@ -79,14 +79,14 @@ class QLearning(object):
             # get index of current state
             current_state_idx = np.where((self.states_array == current_state).all(axis=1))
             current_state_idx = current_state_idx[0][0]
-            #print('current state idx', current_state_idx)
+            
             # search action matrix for a good set of actions given our current state
             potential_next_states = self.action_matrix[current_state_idx,:]
             valid_next_states = np.where(potential_next_states >= 0)[0]
-            #print(valid_next_states)
+            
             next_state_idx = np.random.choice(valid_next_states)
             next_action = int(self.action_matrix[current_state_idx,next_state_idx])
-            #print('next_action', next_action)
+            
             action_dict = self.actions[next_action]
             robot_obj = action_dict["object"]
             to_tag_id = action_dict["tag"]
@@ -94,12 +94,10 @@ class QLearning(object):
             # publish action
             action_msg = RobotMoveObjectToTag(robot_object=robot_obj, tag_id=to_tag_id)
             self.action_pub.publish(action_msg)
+            
             self.action_was_pubbed = 1
-            rospy.sleep(1)
-
+            rospy.sleep(1.5)
             # reward was stored into self.reward, due to the callback function
-            reward_after_action = self.reward
-            #print('reward: ', self.reward)
             gamma = 0.1
 
 
@@ -114,12 +112,15 @@ class QLearning(object):
                 future_state[2] = to_tag_id
             future_state_idx = np.where((self.states_array == future_state).all(axis=1))
             future_state_idx = future_state_idx[0][0]
-            #print('future states ', future_state_idx)
+            print('future state: ', future_state_idx)
             max_Q_candidates = self.Q[future_state_idx,:]
             
             max_Q = np.max(max_Q_candidates)
-            #print('max Q', max_Q)
+            
             # calculate q_value and update the Q matrix
+            reward_after_action = self.reward
+            
+            
             q_value = reward_after_action + (gamma * max_Q)
             self.Q[current_state_idx, next_action] = q_value
             Q_matrix_msg = QMatrix(q_matrix = self.Q)
@@ -135,12 +136,7 @@ class QLearning(object):
             # the q matrix has converged
             if(num_iterations_unchanged == upper_bound_convergence):
                 is_converged = 1
-                print('it converged')
                     
-            #print(future_state_idx)
-            #if reward_after_action == 100:
-            #    print("reward was 100!")
-            #    break
             # updating stuff for the next iteration!
             current_q_value = q_value
             current_state = future_state
@@ -151,6 +147,7 @@ class QLearning(object):
                 current_state = np.asarray([0, 0, 0])
             self.action_was_pubbed = 0
             t = t + 1
+    
 
     def find_best_policy(self):
         # find best actions to take based on max value
@@ -178,17 +175,12 @@ class QLearning(object):
             self.reward = data.reward
 
     def save_q_matrix(self):
-        # TODO: You'll want to save your q_matrix to a file once it is done to
-        # avoid retraining
         np.savetxt('converged_q_matrix.csv', self.Q, delimiter=",")
         return
     
     def run(self):
-        print('it run')
         self.train_q_matrix()
-        self.find_best_policy()
         self.save_q_matrix()
-
 
 if __name__ == "__main__":
     node = QLearning()
