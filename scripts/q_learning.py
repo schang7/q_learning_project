@@ -45,7 +45,8 @@ class QLearning(object):
         self.states = np.loadtxt(path_prefix + "states.txt")
         self.states = list(map(lambda x: list(map(lambda y: int(y), x)), self.states))
         self.states_array = np.asarray(self.states)
-
+        
+        #initialize Q matrix to be of type numpy array. This will be adjusted later on 
         self.Q = np.zeros((len(self.states), len(self.actions)))
         
         # ROS publisher to publish action 
@@ -63,13 +64,17 @@ class QLearning(object):
         self.best_policy = []
 
     def train_q_matrix(self):
+        
+        #various local variables to act as counters for number of iterations, whehter the q matrix has converged or not, and to hold previous states and q values 
         t = 0
         is_converged = 0
         current_state = np.asarray([0, 0, 0])
         current_q_value = -1
+        #tolerance level. This was adjusted as a method of optimizing our parameters. 
         epsilon = 1e-1
 
         num_iterations_unchanged = 0 #no of iterations to determine q matrix convergence 
+        #when num_iterations_unchanged reached our designated upper bound, we decided the matrix has converged 
         upper_bound_convergence = 60
         while not is_converged:
             print('iteration: ', t)
@@ -82,9 +87,11 @@ class QLearning(object):
             
             # search action matrix for a good set of actions given our current state
             potential_next_states = self.action_matrix[current_state_idx,:]
+            #valid next states are those elements of the action matrix where the action is >= 0 
             valid_next_states = np.where(potential_next_states >= 0)[0]
             
             next_state_idx = np.random.choice(valid_next_states)
+            #indexing into the action matrix appropriately 
             next_action = int(self.action_matrix[current_state_idx,next_state_idx])
             
             action_dict = self.actions[next_action]
@@ -96,8 +103,11 @@ class QLearning(object):
             self.action_pub.publish(action_msg)
             
             self.action_was_pubbed = 1
+            #sleeping to ensure the reward is received accurately. We played around with the rospy sleep parameter as a method to optimize our parameters
+            #and try and converge our q matrix quicker. 
+            #We settled on 1.5, as any number lower was not receiving our reward correctly. 
             rospy.sleep(1.5)
-            # reward was stored into self.reward, due to the callback function
+            #discount factor set to what we used in class 
             gamma = 0.1
 
 
@@ -113,21 +123,30 @@ class QLearning(object):
             future_state_idx = np.where((self.states_array == future_state).all(axis=1))
             future_state_idx = future_state_idx[0][0]
             print('future state: ', future_state_idx)
+            #the candidates for the q value would be all members of the QMatrix in the row that corresponds to our future state index 
             max_Q_candidates = self.Q[future_state_idx,:]
             
+            #the q value we choose will be the max of the candidates 
             max_Q = np.max(max_Q_candidates)
             
             # calculate q_value and update the Q matrix
             reward_after_action = self.reward
             
-            
+            #calculating the q value using the Bellman Equation 
             q_value = reward_after_action + (gamma * max_Q)
+            
+            #updating the Q Matrix 
             self.Q[current_state_idx, next_action] = q_value
+            
+            #publishing the Q Matix 
             Q_matrix_msg = QMatrix(q_matrix = self.Q)
             self.q_matrix_pub.publish(Q_matrix_msg)
 
             # checking for convergence 
-            #checking if the q value has not changed in n iterations 
+            #checking if the difference between consecutive q values has been negligible for a certain number of iterations 
+            #we saw that our q matrix converged at 6700 iterations, and the q values had not differed significantly for 60 iterations consecutively. 
+            #thus we set our upper bound of convergence to 60, to determine if our q matrix has converged.
+            #We also checked visually the converged q matrix, and confirmed that it was giving us the correct goal state/ policy. 
             if abs(q_value - current_q_value) < epsilon: 
                 num_iterations_unchanged += 1
             else:
