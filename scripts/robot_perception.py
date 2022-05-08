@@ -84,7 +84,7 @@ class ObjectIdentifier:
         # a list of dictionaries with keys 'object' and 'tag'
         self.best_policy = self.find_best_policy()
         
-        self.object_placed = 0
+        self.object_found = 0
         self.object_picked_up = 0
         self.tag_found = 0
         self.object_dropped = 0
@@ -295,6 +295,23 @@ class ObjectIdentifier:
         return best_policy
 
     def run(self):
+        #TODO:
+        #i.e. something like this
+        #either loop through the actions, or pop off the actions in the list one by one
+        #for action in self.best_policy:
+        #   extract object color and tag id
+        #   if self.object_found == 0:
+        #       self.find_object(color)
+        #   else:
+        #       if self.object_picked_up == 0:
+        #           self.pick_up_object()
+        #       else:
+        #           if self.tag_found == 0:
+        #               self.find_tag(tag)
+        #           else:
+        #               if self.object_dropped == 0:
+        #                   self.drop_object()
+        
         rospy.spin()
                 
 if __name__ == '__main__':
