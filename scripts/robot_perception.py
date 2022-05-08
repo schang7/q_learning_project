@@ -4,13 +4,16 @@ import rospy, cv2, cv_bridge, numpy
 from sensor_msgs.msg import Image, LaserScan
 from geometry_msgs.msg import Twist, Vector3
 import numpy as np
+import os
 
-from q_learning_project.msg import Traffic
+aruco_dict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_4X4_50)
+#from q_learning_project.msg import Traffic
 
 # TODO: import aruco stuff
 
 # Path of directory on where this file is located
 path_prefix = os.path.dirname(__file__) + "/action_states/"
+matrix_prefix = os.path.dirname(__file__) + '/'
 
 class ObjectIdentifier:
 
@@ -22,6 +25,14 @@ class ObjectIdentifier:
 
         # initalize the debugging window
         cv2.namedWindow("window", 1)
+        ### Different states
+        #to keep track of whether the robot is holding an object or not - aka is it looking for an object or an AR tag 
+        #self.finding_color = 1
+
+        # this applies to either an object or an ar tag
+        # if 1, then we are still looking for an object or ar tag
+        # if 0, then we are 
+        #self.is_exploring = 1
 
         # subscribe to the robot's RGB camera data stream
         self.image_sub = rospy.Subscriber('/camera/rgb/image_raw',
@@ -34,12 +45,15 @@ class ObjectIdentifier:
         self.movement_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
         
         # TODO: traffic publisher
-        self.traffic_status_pub = rospy.Publisher("/traffic_status", Traffic)
+        #self.traffic_status_pub = rospy.Publisher("/traffic_status", Traffic)
 
         # initializing movement publishing
         self.movement = Twist(linear=Vector3(), angular=Vector3())
         # for proportional control
-        self.min_dist_away = 0.1
+        self.min_dist_away = 0.72
+
+        self.scans = None
+        self.images = None
 
         ### Parameters for finding the best set of options given a state
         # Fetch states. There are 64 states. Each row index corresponds to the
@@ -65,28 +79,29 @@ class ObjectIdentifier:
         ))
 
         # getting the converged q_matrix to obtain a best policy
-        self.converged_q_matrix = np.loadtxt('converged_q_matrix.csv')
+        self.converged_q_matrix = np.loadtxt(matrix_prefix +'converged_q_matrix.csv', delimiter=',')
+
         # a list of dictionaries with keys 'object' and 'tag'
         self.best_policy = self.find_best_policy()
-
-        # FOR OUR BEST POLICY, WE DON'T NECESSARILY DO IT IN THE ORDER THAT IS SPECIFIED BY THE BEST POLICY MATRIX
-        # WE CAN DO IT OUT OF ORDER, JUST CHECK THE COLOR CURRENTLY IN VIEW WITH THE TAG THAT IS SUPPOSED TO BE NEXT 
-
-        ### Different states
-        #to keep track of whether the robot is holding an object or not - aka is it looking for an object or an AR tag 
-        self.finding_color = 1
-
-        # this applies to either an object or an ar tag
-        # if 1, then we are still looking for an object or ar tag
-        # if 0, then we are 
-        self.is_exploring = 1
-
-
-        self.placed_pink = 0
-        self.placed_blue = 0
-        self.placed_green = 0 
-
         
+        self.object_placed = 0
+        self.object_picked_up = 0
+        self.tag_found = 0
+        self.object_dropped = 0
+
+    def find_object(self, color):
+        #TODO: do a modular way of finding the object
+    def pick_up_object(self):
+        #TODO: do a modular way of picking up the object
+    def find_tag(self, tag):
+        #TODO: do a modular way of finding the tag
+    def drop_object(self):
+        #TODO: do a modular way of dropping the object
+    def scan_callback(self, data):
+        self.scans = data.ranges 
+    def image_callback(self, msg):
+        self.images = msg
+    '''    
 
     def image_callback(self, msg):
         # image_callback and the exploration control loop
@@ -140,9 +155,10 @@ class ObjectIdentifier:
                 green_M = cv2.moments(green_mask)
 
                 # TODO: apply this to all the colors, currently just to pink mask
+                M = blue_M
                 # if there are any colored pixels found
-                if pink_M['m00'] > 0:
-                        print('detected the color pink')
+                if M['m00'] > 0:
+                        #print('detected the color pink')
                         # center of the colored pixels in the image
                         cx = int(M['m10']/M['m00'])
                         cy = int(M['m01']/M['m00'])
@@ -162,19 +178,32 @@ class ObjectIdentifier:
                         # pink/blue/green object head on, so that we can set a boolean for
                         # starting to move towards the object with linear acceleration
                         # e.g.
-                        # tol = 1e-2
-                        # if error < tol:
-                        #    self.is_exploring = 0
-                        #else:
-                        #    self.is_exploring = 1
+                        print('angle error')
+                        print(error)
+                        tol = 1
+                        if abs(error) < tol:
+                            self.is_exploring = 0
+                        else:
+                            self.is_exploring = 1
 
                 # shows the debugging window
                 # hint: you might want to disable this once you're able to get a red circle in the debugging window
                 cv2.imshow("window", image)
                 cv2.waitKey(3)
             else: # detecting an AR tag
-                # TODO: code that 
-                print('whatever')
+                # corners is a 4D array of shape (n, 1, 4, 2), where n is the number of tags detected
+                # each entry is a set of four (x, y) pixel coordinates corresponding to the
+                # location of a tag's corners in the image
+
+                # ids is a 2D array array of shape (n, 1)
+                # each entry is the id of a detected tag in the same order as in corners
+                # tags are 1, 2, and 3 
+                # pink should go to 3
+
+                grey_image = self.bridge.imgmsg_to_cv2(msg,desired_encoding='mono8')
+                corners, ids, rejected_points = cv2.aruco.detectMarkers(grayscale_image, aruco_dict)
+
+
         else: # if we are not exploring, we want to stop turning 
             self.movement.angular.z = 0.0
 
@@ -183,6 +212,7 @@ class ObjectIdentifier:
         self.movement_pub.publish(self.movement)
     
     def scan_callback(self, data):
+        self.scans = data
         # extracting distances of the objects or tags located 
         # -10 to 10 degrees in front of the bot
         ranges = np.asarray(data.ranges)
@@ -196,16 +226,18 @@ class ObjectIdentifier:
         # through the camera and we want to start moving close to it
         slice_mean = np.nanmean(np.append(ranges[first_half_angles],ranges[second_half_angles]))
         error = slice_mean - self.min_dist_away # TODO: this might be flipped
-        k = 0.003
+        k = 0.05
 
-        if not self.is_exploring:    
+        if not self.is_exploring:
+            print('is starting to move forward towards goal')
             self.movement.linear.x = k*error
+            print(error)
             
             # TODO: need to figure out when to actually publish traffic messages for arm movement
             # e.g.
-            # tol = 1e-2
-            # if error < tol:
-            #   self.movement.linear.x = 0 # quit all cmd_vel movement
+            #tol = 1e-2
+            #if error < tol:
+            #    self.movement.linear.x = 0 # quit all cmd_vel movement
             #   if self.finding_color: # if we were just looking for an object
             #       traffic_msg = Traffic(pick_up_object = 1, put_down_object = 0)
             #       rospy.sleep(1) # ?
@@ -222,7 +254,7 @@ class ObjectIdentifier:
             self.movement.linear.x = 0
         
         self.movement_pub.publish(self.movement) 
-    
+    '''
     def find_best_policy(self):
         # find best actions to take based on max value
         # at the beginning we want to start at the origin for all objects (state = 0,0,0)
@@ -236,15 +268,30 @@ class ObjectIdentifier:
         while not reached_final_state:
             # get index of current state
             current_state_idx = np.where((self.states_array == current_state).all(axis=1))[0][0]
-
-            q_vals_current_state = self.converged_Q_matrix[current_state_idx,:]
-            best_action = np.argmax(q_vals_current_state)
-            best_policy.append(self.actions[best_action])
+            
+            q_vals_current_state = self.converged_q_matrix[current_state_idx,:]
 
             if np.min(q_vals_current_state) == np.max(q_vals_current_state):
                 # all values are equal for the q_vals, there is nowhere else to jump to next
                 reached_final_state = 1
-        
+                break
+
+            best_action = np.argmax(q_vals_current_state)
+            best_policy.append(self.actions[best_action])
+            
+            # figure out our next state
+            next_state = current_state.copy()
+            robot_obj = self.actions[best_action]["object"]
+            to_tag_id = self.actions[best_action]["tag"]
+            if robot_obj == 'pink':
+                next_state[0] = to_tag_id
+            elif robot_obj == 'green':
+                next_state[1] = to_tag_id
+            elif robot_obj == 'blue':
+                next_state[2] = to_tag_id
+
+            current_state = next_state
+
         return best_policy
 
     def run(self):
