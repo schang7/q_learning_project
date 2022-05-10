@@ -207,8 +207,31 @@ class ObjectIdentifier:
         self.object_picked_up = 1
 
     def find_tag(self, tag):
-        #TODO: do a modular way of finding the tag
-        return
+        self.movement.angular.z = -0.1
+        # corners is a 4D array of shape (n, 1, 4, 2), where n is the number of tags detected
+        # each entry is a set of four (x, y) pixel coordinates corresponding to the
+        # location of a tag's corners in the image
+        
+        # ids is a 2D array of shape (n, 1)
+        # each entry is the id of a detected tag in the same order as in corners
+        
+        # tags are 1, 2, and 3 
+        # pink should go to 3
+        if self.images is not None:
+            grayscale_image = self.bridge.imgmsg_to_cv2(self.images,desired_encoding='mono8')
+            corners, ids, rejected_points = cv2.aruco.detectMarkers(grayscale_image, aruco_dict)
+            print('ids', ids)
+            print('corners', corners)
+            #tag_idx = np.argwhere(ids == tag)
+            # do things with proportional control
+            #if tag_idx is : # this might not work for list syntax
+            #    tag_idx = np.argwhere(ids == tag)
+                
+            #    self.tag_found = 1
+     
+        self.movement_pub.publish(self.movement) 
+
+
     def drop_object(self):
         arm_joint_goal = [0.0, 0.5, 0.1, -0.65]
         self.move_group_arm.go(arm_joint_goal, wait=True)
@@ -394,33 +417,34 @@ class ObjectIdentifier:
         return best_policy
 
     def run(self):
-        
+        # while the list of remaining actions to take is not empty
+        #while self.best_policy:
         while True:
-            if not self.object_found:
-                self.find_object('blue')
-            elif not self.object_picked_up:
-                self.pick_up_object()
-            elif not self.object_dropped:
-                self.drop_object()
+            current_action = self.best_policy[0]
+            #color = current_action["object"]
+            #tag = current_action["tag"]
+            color = 'blue'
+            tag = 1
+            if not self.tag_found:
+                self.find_tag(tag)
+            #if not self.object_found:
+            #    self.find_object(color)
+            #elif not self.object_picked_up:
+            #    self.pick_up_object()
+            #elif not self.tag_found:
+            #    self.find_tag(tag)
+            #elif not self.object_dropped:
+            #    self.drop_object()
             # change all these booleans to 0 after everything is complete
+            # remove action so that we can perform the next one
+            #else:
+            #    self.best_policy.pop(0)
+            #    self.object_found = 0
+            #    self.object_picked_up = 0
+            #    self.tag_found = 0
+            #    self.object_dropped = 0
             rospy.sleep(1)
-        #TODO:
-        #i.e. something like this
-        #either loop through the actions, or pop off the actions in the list one by one
-        #for action in self.best_policy:
-        #   extract object color and tag id
-        #   if self.object_found == 0:
-        #       self.find_object(color)
-        #   else:
-        #       if self.object_picked_up == 0:
-        #           self.pick_up_object()
-        #       else:
-        #           if self.tag_found == 0:
-        #               self.find_tag(tag)
-        #           else:
-        #               if self.object_dropped == 0:
-        #                   self.drop_object()
-        
+       
         rospy.spin()
                 
 if __name__ == '__main__':
