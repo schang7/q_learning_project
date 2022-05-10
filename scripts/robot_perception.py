@@ -5,6 +5,8 @@ from sensor_msgs.msg import Image, LaserScan
 from geometry_msgs.msg import Twist, Vector3
 import numpy as np
 import os
+# import the moveit_commander, which allows us to control the arms
+import moveit_commander
 
 aruco_dict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_4X4_50)
 #from q_learning_project.msg import Traffic
@@ -50,7 +52,7 @@ class ObjectIdentifier:
         # initializing movement publishing
         self.movement = Twist(linear=Vector3(), angular=Vector3())
         # for proportional control
-        self.min_dist_away = 0.72
+        self.min_dist_away = .5
 
         self.scans = None
         self.images = None
@@ -89,29 +91,142 @@ class ObjectIdentifier:
         self.tag_found = 0
         self.object_dropped = 0
 
+        self.start_moving_forward = 0
+        # the interface to the group of joints making up the turtlebot3
+        # openmanipulator arm
+        self.move_group_arm = moveit_commander.MoveGroupCommander("arm")
+
+        # the interface to the group of joints making up the turtlebot3
+        # openmanipulator gripper
+        self.move_group_gripper = moveit_commander.MoveGroupCommander("gripper")
+
+        # Resetting the arm position
+        self.move_group_arm.go([0,0.5,0.1,-0.65], wait=True)
+        self.move_group_gripper.go([0.0,0.0], wait=True)
+
+        print("ready")
+
     def find_object(self, color):
-        #TODO: do a modular way of finding the object
+        if self.images is not None:
+            print('find object ran')
+
+            self.movement.angular.z = -0.1
+            image = self.bridge.imgmsg_to_cv2(self.images,desired_encoding='bgr8')
+            
+            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            
+            if color == 'blue':
+                lower_bound = numpy.array([95, 90, 100]) 
+                upper_bound = numpy.array([105, 110, 150]) 
+            elif color == 'pink':
+                lower_bound= numpy.array([155, 140, 120]) 
+                upper_bound= numpy.array([165, 160, 170]) 
+            elif color == 'green':
+                lower_bound = numpy.array([30, 130, 90]) 
+                upper_bound = numpy.array([40, 150, 150]) 
+            
+            # erases all the pixels in the image that aren't in that range
+            mask = cv2.inRange(hsv, lower_bound, upper_bound)
+            
+            # determines the center of the colored pixels
+            M = cv2.moments(mask)
+
+            h, w, d = image.shape
+
+
+            # if it detected the color
+            if M['m00'] > 0:
+                print('detected the color')
+                # center of the colored pixels in the image
+                cx = int(M['m10']/M['m00'])
+                cy = int(M['m01']/M['m00'])
+                
+                # a red circle is visualized in the debugging window to indicate
+                # the center point of the colored pixels
+                cv2.circle(image, (cx, cy), 20, (0,0,255), -1)
+                # proportional control to orient towards the colored object
+                angular_error = ((w/2) - (cx))
+                angular_k = 0.003
+                self.movement.angular.z = angular_k * angular_error
+                
+                tol = 5
+                if abs(angular_error) < tol:
+                    self.start_moving_forward = 1
+
+                if self.start_moving_forward:
+                    # extracting distances of the objects or tags located 
+                    # -10 to 10 degrees in front of the bot
+                    if self.scans is not None:
+                        ranges = np.asarray(self.scans)
+                        ranges[ranges == 0.0] = np.nan
+                        slice_size = int(20)
+                        first_half_angles = slice(0,int(slice_size/2))
+                        second_half_angles = slice(int(-slice_size/2),0)
+                    
+                        # this is the mean distance of likely the object that has been detected
+                        # we want to minimize this distance once the robot has detected the object 
+                        # through the camera and we want to start moving close to it
+                        slice_mean = np.nanmean(np.append(ranges[first_half_angles],ranges[second_half_angles]))
+                        linear_error = slice_mean - self.min_dist_away 
+                        linear_k = 0.07
+                        print('this is the linear error')
+                        print(linear_error)
+                        print('is starting to move forward towards goal')
+                        self.movement.linear.x = linear_k * linear_error
+                        
+                        linear_tol = 0.30
+                        if abs(linear_error) < linear_tol:
+                            self.start_moving_forward = 0
+                            self.object_found = 1
+                            self.movement.linear.x = 0
+                            self.movement.angular.z = 0
+                        #TODO: if within tolerance, say that you are finished
+                        # ready to pick up object and then set start_moving_forward to 0 
+                else:
+                    self.movement.linear.x = 0.0
+                    
+
+                # shows the debugging window
+                # hint: you might want to disable this once you're able to get a red circle in the debugging window
+                cv2.imshow("window", image)
+                cv2.waitKey(3)
+
+                
+            self.movement_pub.publish(self.movement) 
+
     def pick_up_object(self):
-        #TODO: do a modular way of picking up the object
+        gripper_joint_goal = [-0.006, -0.006]
+        self.move_group_gripper.go(gripper_joint_goal, wait=True)
+        self.move_group_gripper.stop()
+
+        arm_joint_goal = [0.0, -.7, .1, -0.65]
+        self.move_group_arm.go(arm_joint_goal, wait=True)
+        self.move_group_arm.stop()
+
+        rospy.sleep(1)
+        self.object_picked_up = 1
+
     def find_tag(self, tag):
         #TODO: do a modular way of finding the tag
+        return
     def drop_object(self):
-        #TODO: do a modular way of dropping the object
+        arm_joint_goal = [0.0, 0.5, 0.1, -0.65]
+        self.move_group_arm.go(arm_joint_goal, wait=True)
+        self.move_group_arm.stop()
+
+        gripper_joint_goal = [0.0,0.0]
+        self.move_group_gripper.go(gripper_joint_goal, wait=True)
+        self.move_group_gripper.stop()
+
+        rospy.sleep(1)
+        self.object_dropped = 1
+
     def scan_callback(self, data):
         self.scans = data.ranges 
     def image_callback(self, msg):
         self.images = msg
     '''    
-
     def image_callback(self, msg):
-        # image_callback and the exploration control loop
-        # only handles robot movement in the angular direction;
-        # we only stop or stop angular movement depending on 
-        # whether the robot is looking for an object or AR tag. 
-        # it does affect linear acceleration by setting booleans to true or false
-        # depending on whether an object/ar tag is detected, but that execution is then handled by the
-        # scan_callback function
-
         if self.is_exploring:
             # start turning 
             self.movement.angular.z = -0.1
@@ -119,11 +234,9 @@ class ObjectIdentifier:
             # TODO: using scan to also figure out where stuff is, but we could also use the color
              
             if self.finding_color:
-
                 # converts the incoming ROS message to OpenCV format and HSV (hue, saturation, value)
                 image = self.bridge.imgmsg_to_cv2(msg,desired_encoding='bgr8')
                 hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-
                 lower_blue = numpy.array([95, 90, 100]) 
                 upper_blue = numpy.array([105, 110, 150]) 
                 lower_pink= numpy.array([155, 140, 120]) 
@@ -134,12 +247,10 @@ class ObjectIdentifier:
                 # TODO!!!!!!: need to find a way to not consider the other colors when 
                 # we've already placed a pink, green, or blue object. using self.placed_color could be advantageous here
                 # We also need to utilize our policy from the q-matrix somehow
-
                 # this erases all pixels that aren't the color in question
                 pink_mask = cv2.inRange(hsv, lower_pink, upper_pink)
                 blue_mask = cv2.inRange(hsv, lower_blue, upper_blue)
                 green_mask = cv2.inRange(hsv, lower_green, upper_green)
-
                 # TODO: figure out if we need to limit out search scope, but probably not
                 # currently commented out
                 # this limits our search scope to only view a slice of the image near the ground
@@ -148,12 +259,10 @@ class ObjectIdentifier:
                 #search_bot = int(3*h/4 + 20)
                 #mask[0:search_top, 0:w] = 0
                 #mask[search_bot:h, 0:w] = 0
-
                 # using moments() function, the center of the colored pixels is determined
                 pink_M = cv2.moments(pink_mask)
                 blue_M = cv2.moments(blue_mask)
                 green_M = cv2.moments(green_mask)
-
                 # TODO: apply this to all the colors, currently just to pink mask
                 M = blue_M
                 # if there are any colored pixels found
@@ -162,16 +271,13 @@ class ObjectIdentifier:
                         # center of the colored pixels in the image
                         cx = int(M['m10']/M['m00'])
                         cy = int(M['m01']/M['m00'])
-
                         # a red circle is visualized in the debugging window to indicate
                         # the center point of the yellow pixels
                         # hint: if you don't see a red circle, check your bounds for what is considered 'yellow'
                         cv2.circle(image, (cx, cy), 20, (0,0,255), -1)
-
                         # proportional control to orient towards the colored object
                         error = ((w/2) - (cx))
                         k = 0.003
-
                         self.movement.angular.z = k * error
                         
                         # TODO: maybe set a tolerance for judging whether the robot is facing the 
@@ -185,7 +291,6 @@ class ObjectIdentifier:
                             self.is_exploring = 0
                         else:
                             self.is_exploring = 1
-
                 # shows the debugging window
                 # hint: you might want to disable this once you're able to get a red circle in the debugging window
                 cv2.imshow("window", image)
@@ -194,19 +299,14 @@ class ObjectIdentifier:
                 # corners is a 4D array of shape (n, 1, 4, 2), where n is the number of tags detected
                 # each entry is a set of four (x, y) pixel coordinates corresponding to the
                 # location of a tag's corners in the image
-
                 # ids is a 2D array array of shape (n, 1)
                 # each entry is the id of a detected tag in the same order as in corners
                 # tags are 1, 2, and 3 
                 # pink should go to 3
-
                 grey_image = self.bridge.imgmsg_to_cv2(msg,desired_encoding='mono8')
                 corners, ids, rejected_points = cv2.aruco.detectMarkers(grayscale_image, aruco_dict)
-
-
         else: # if we are not exploring, we want to stop turning 
             self.movement.angular.z = 0.0
-
         # publishing either a movement to keep exploring (turning in circles)
         # or proportional control to orient the robot to the object/AR tag
         self.movement_pub.publish(self.movement)
@@ -227,7 +327,6 @@ class ObjectIdentifier:
         slice_mean = np.nanmean(np.append(ranges[first_half_angles],ranges[second_half_angles]))
         error = slice_mean - self.min_dist_away # TODO: this might be flipped
         k = 0.05
-
         if not self.is_exploring:
             print('is starting to move forward towards goal')
             self.movement.linear.x = k*error
@@ -295,6 +394,16 @@ class ObjectIdentifier:
         return best_policy
 
     def run(self):
+        
+        while True:
+            if not self.object_found:
+                self.find_object('blue')
+            elif not self.object_picked_up:
+                self.pick_up_object()
+            elif not self.object_dropped:
+                self.drop_object()
+            # change all these booleans to 0 after everything is complete
+            rospy.sleep(1)
         #TODO:
         #i.e. something like this
         #either loop through the actions, or pop off the actions in the list one by one
