@@ -1,1 +1,6 @@
-<!-- TODO -->
+<launch>
+
+    <node name="rgb_compress" pkg="image_transport" type="republish" args="compressed in:=raspicam_node/image raw out:=camera/rgb/image_raw" />
+    <node name="object_identifier" pkg="q_learning_project" type="robot_perception.py" cwd="node" />
+
+</launch>
