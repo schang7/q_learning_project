@@ -1,5 +1,54 @@
 # q_learning_project
 
+Part 2 Write Up: 
+
+Please note: Ana worked on it till her late hours were over (till Thursday at 11 am), and Suha worked on editing the write up for the remainder of her late hours. 
+
+- Executing the path most likely to lead to receiving a reward after the Q-matrix has converged on the simulated Turtlebot3 robot
+  Description:	 For finding the policy, we first check if the Q matrix has reached its final state which is if all the q values are equal. If it has, then we set a flag reached_final_state to 1. To find the correct tags that match the correct objects
+  Location: find_best_policy in robot_perception.py
+  
+Robot perception description: Describe how you accomplished each of the following components of the perception elements of this project in 1-3 sentences, any online sources of information/code that helped you to recognize the objects, and also describe what functions / sections of the code executed each of these components (1-3 sentences per function / portion of code):
+
+Identifying the locations and identities of each of the colored objects
+  Location: within robot_perception.py, the find_object method in the object_identifier class
+  Description: We first had the robot spin around until it found an object that was within the optimal hsv range for one of the three color identities it would be looking for depending on the action being executed in the best policy (pink, green, or blue). We found these ranges through online color picker applications and also by putting the objects in front of the camera and observing the reported hsv values. We then created a mask to remove all the color pixel values that were not in the range of the color we were considering and found the central location of the desired color pixels’ in the image. This central location was considered to be the location of the colored object.
+  
+Identifying the locations and identities of each of the AR tags
+  Location: find_tag method in robot_perception.py 
+  Description: We programmed the robot such that it detects the corresponding AR tag id, and then moves to the AR tag using proportional control. We detected the correct AR tag by matching the id of a detected tag with the correct tag from the action output of our converged Q Matrix. Once it finds the correct AR tag, it moves towards it until it’s within a set linear distance tolerance. 
+  
+Robot manipulation and movement: Describe how you accomplished each of the following components of the robot manipulation and movement elements of this project in 1-3 sentences, and also describe what functions / sections of the code executed each of these components (1-3 sentences per function / portion of code):
+  Moving to the right spot in order to pick up a colored object
+  Location: find_object method in robot_perception.py
+  Description: We used proportional control to angle the robot towards the location of the object (central location of the pink/blue/green pixels) so that the robot faced the object head on. If the front of the robot (0 degrees) faced the object within a certain angular tolerance from the object, we considered it as facing the object and initiated forward linear movement towards it using proportional control. We used LIDAR scan range data from within _8_ degrees of the front of the robot to see how far away it was from the object, and if it was close enough within a certain tolerance such that the object was inside the gripper, we stopped all movement. 
+  
+Picking up the colored object
+  Location: pick_up_object method in robot_perception.py
+  Description: We tested out different joint angle and gripper width configurations using the moveit GUI to see how the arm should be positioned to pick up the object. The robot is initially set to have its arm extended in front of it (without blocking the LIDAR) and gripper wide open. Once the robot was positioned such that the object was inside this gripper, we initiated movements that closed the gripper to grab the object and lift the arm up so that the object is high in the air (does not interfere with the LiDAR scan). 
+  
+Moving to the desired destination (AR tag) with the colored object
+  Location: find_tag method in robot_perception.py
+  Description: While the arm was still gripping the object we had the robot turn around and then identify the corresponding AR tag. We used proportional control again to angle the robot towards the correct AR tag so that it would face it head on, but this time initiated constant linear movement towards the object if the front of the robot was within an angular tolerance from the center of the AR tag. Once the robot got close enough to the AR tag within a set linear distance tolerance, we stopped all movement. 
+  
+Putting the colored object back down at the desired destination
+  Location: drop_object method in robot_perception.py
+  Description: We had the robot first lower its arm back to its initial position (extended outwards) and let the program sleep for a second to make sure the joint arm movements were executed. We then made the gripper open up again while also having the robot linearly move backwards for one second so that it would let go of the object, and then get the object out of the vicinity of the gripper so that when it starts exploring for another colored object., it does not knock the other one over. 
+  
+Challenges (1 paragraph): Describe the challenges you faced and how you overcame them.
+A persistent challenge we had was our measurements in general being very noisy or laggy. For instance, our LIDAR scan was noisy so we continuously had to modify our parameters in the proportional control to ensure the robot reaches the correct distance away from the objects to pick it up (e.g. changing the range of degrees considered for the lidar scan, updating the angular or linear tolerances, decreasing our k-values to make updates slower and more precise). 
+For the camera, the images would often be very laggy such that the correct actions were not initiated in time and the color measurements would be impacted by other objects in the real world environment. We overcame this by conducting our tests in a space closer to the intro_robo wifi connection and controlling our environment by ensuring no other colors were in the view of the robot. Continuing from above, the presence of noise in detecting the AR tag was also an issue. We overcame this by moving the robot slower while it was turning to explore the different tags and making it move sooner towards the tag in the forwards linear direction if it had detected it (by increasing the angular tolerance for find_tag) because the detection quality would get better as the robot got closer.  
+For the big picture, figuring out how to structure our code in enacting different modular step of robot movement was a challenge we faced at first. We first wrote logic within callback functions for LIDAR scan and image receiving topics but realized that it was too complicated, so we wrote them in separate functions and were able to figure out a sound logic for executing each action within the run function. 
+Future work (1 paragraph): If you had more time, how would you improve your implementation?
+We would make our logic more robust to noise and include faster movements, since we had to make things a bit slower in order to make sure that it properly recognized and moved towards objects due to the noise. One idea that could help with recognition issues would be to have the robot go back to the center using odometry information after it correctly picks up an object or drops it off at a tag so that it is easy
+Also, for our q-learning portion our algorithm converged a bit slowly. The reason why is because we included sleeps in our logic to make sure that the correct reward was being published and received after different actions (since shorter sleeps led to the program receiving the wrong rewards). However, we would improve the q-learning implementation by having the q-values for the Q-matrix be calculated within the callback function that receives the rewards and use booleans to detect whether updates to the matrix had been made so that we would avoid having to handle so many sleep statements. 
+
+Takeaways (at least 2 bullet points with 2-3 sentences per bullet point): What are your key takeaways from this project that would help you/others in future robot programming assignments working in pairs? For each takeaway, provide a few sentences of elaboration.
+One key takeaway was how to create modular structure for code in logical ways. Since this project had so many moving parts, it gave us experience in breaking down a large objective into smaller goals, and tackling them one at a time. This will be especially useful for the team final project, where we might be implementing different interesting modules for our project and can divide and conquer for writing and managing different types of algorithms.
+Incorporating arm control was another key takeaway of the project. We learned that a lot of pick-up/drop-off movements can be perfected by tweaking the gripper joint parameters and gained experience in learning about how different joint angles affect the position of the robot arm. This will help in future projects where we hope to use the robot arm for dextrous movements that allow you to pick up and manipulate things in the environment. 
+Another key takeaway from this project was again the importance of accounting for noise in real-world applications of robotics and budgeting time for optimizing parameters. As we gain more experience in implementing complex forms of color/object/distance recognition, sensor measurements play a greater role in robot control and we will need to be experienced in handling noise in these situations. 
+
+
 Writeup
 
 Objectives description, high-level description, Q-learning algorithm description
