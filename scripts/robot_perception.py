@@ -101,7 +101,7 @@ class ObjectIdentifier:
         self.move_group_gripper = moveit_commander.MoveGroupCommander("gripper")
 
         # Resetting the arm position
-        self.move_group_arm.go([0,0.5,0.1,-0.65], wait=True)
+        self.move_group_arm.go([0,0.4,0.1,-0.65], wait=True)
         self.move_group_arm.stop()
         self.move_group_gripper.go([0.019,0.019], wait=True)
         self.move_group_gripper.stop()
@@ -112,7 +112,7 @@ class ObjectIdentifier:
         if self.images is not None:
             print('find object ran')
 
-            self.movement.angular.z = 0.1
+            self.movement.angular.z = 0.2
             image = self.bridge.imgmsg_to_cv2(self.images,desired_encoding='bgr8')
             
             hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
@@ -151,7 +151,7 @@ class ObjectIdentifier:
                 angular_k = 0.001
                 self.movement.angular.z = angular_k * angular_error
                 
-                tol = 10
+                tol = 30
                 print(angular_error)
                 if abs(angular_error) < tol:
                     self.start_moving_forward = 1
@@ -159,10 +159,11 @@ class ObjectIdentifier:
                 if self.start_moving_forward:
                     # extracting distances of the objects or tags located 
                     # -10 to 10 degrees in front of the bot
+                    print('should start moving forward')
                     if self.scans is not None:
                         ranges = np.asarray(self.scans)
                         ranges[ranges == 0.0] = np.nan
-                        slice_size = int(14)
+                        slice_size = int(16)
                         first_half_angles = slice(0,int(slice_size/2))
                         second_half_angles = slice(int(-slice_size/2),0)
                     
@@ -171,18 +172,19 @@ class ObjectIdentifier:
                         # through the camera and we want to start moving close to it
                         slice_mean = np.nanmean(np.append(ranges[first_half_angles],ranges[second_half_angles]))
                         if np.isnan(slice_mean):
+                            print('empty slice')
                             self.movement.linear.x = 0.0
                         else:
                             linear_error = slice_mean - self.min_dist_away 
                             print(linear_error) 
-                            linear_k = 0.02
+                            linear_k = 0.04
                             #print('this is the linear error')
                             #print(linear_error)
                             #print('is starting to move forward towards goal')
                             self.movement.linear.x = linear_k * linear_error
                         
-                            linear_tol = 0.30
-                            if abs(linear_error) < linear_tol:
+                            linear_tol = 0.20
+                            if linear_error < linear_tol:
                                 self.start_moving_forward = 0
                                 self.object_found = 1
                                 self.movement.linear.x = 0
@@ -216,7 +218,7 @@ class ObjectIdentifier:
 
     def find_tag(self, tag):
         print('find tag running')
-        self.movement.angular.z = 0.075
+        self.movement.angular.z = 0.1
         # corners is a 4D array of shape (n, 4, 2), where n is the number of tags detected
         # each entry is a set of four (x, y) pixel coordinates corresponding to the
         # location of a tag's corners in the image
@@ -255,16 +257,17 @@ class ObjectIdentifier:
                     h, w  = grayscale_image.shape
                     angular_error = ((w/2) - (cx))
  
-                    angular_k = 0.002
+                    angular_k = 0.001
                     print(angular_error)
                     self.movement.angular.z = angular_k*angular_error
-                    tol = 10
+                    tol = 30
                     if abs(angular_error) < tol:
                         self.start_moving_forward = 1
 
                     if self.start_moving_forward:
                         # extracting distances of the objects or tags located 
                         # -10 to 10 degrees in front of the bot
+                        print('should start moving forward')
                         if self.scans is not None:
                             ranges = np.asarray(self.scans)
                             ranges[ranges == 0.0] = np.nan
@@ -280,14 +283,14 @@ class ObjectIdentifier:
                                 self.movement.linear.x = 0
                             else:
                                 linear_error = slice_mean - self.min_dist_away 
-                                linear_k = 0.07
+                                #linear_k = 0.15
                                 #print('this is the linear error')
                                 print(linear_error)
                                 #print('is starting to move forward towards goal')
-                                self.movement.linear.x = linear_k * linear_error
-                            
-                                linear_tol = 0.03
-                                if abs(linear_error) < linear_tol:
+                                #self.movement.linear.x = linear_k * linear_error
+                                self.movement.linear.x = 0.04
+                                linear_tol = 0.005
+                                if linear_error < linear_tol:
                                     self.start_moving_forward = 0
                                     self.tag_found = 1
                                     self.movement.linear.x = 0
@@ -305,7 +308,7 @@ class ObjectIdentifier:
 
     def drop_object(self):
         print('drop object running')
-        arm_joint_goal = [0.0, 0.5, 0.1, -0.65]
+        arm_joint_goal = [0.0, 0.4, 0.1, -0.65]
         self.move_group_arm.go(arm_joint_goal, wait=True)
         self.move_group_arm.stop()
         rospy.sleep(5)
@@ -369,7 +372,7 @@ class ObjectIdentifier:
 
     def run(self):
         # while the list of remaining actions to take is not empty
-        while len(self.best_policy) > 0:
+        while len(self.best_policy) > 0: #or not rospy.is_shutdown():
             current_action = self.best_policy[0]
             color = current_action["object"]
             tag = current_action["tag"]
@@ -389,7 +392,7 @@ class ObjectIdentifier:
                 self.object_dropped = 0
             rospy.sleep(1)
        
-        rospy.spin()
+        #rospy.spin()
                 
 if __name__ == '__main__':
     object_identifier = ObjectIdentifier()
