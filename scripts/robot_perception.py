@@ -9,9 +9,8 @@ import os
 import moveit_commander
 
 aruco_dict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_4X4_50)
-#from q_learning_project.msg import Traffic
 
-# TODO: import aruco stuff
+
 
 # Path of directory on where this file is located
 path_prefix = os.path.dirname(__file__) + "/action_states/"
@@ -27,14 +26,7 @@ class ObjectIdentifier:
 
         # initalize the debugging window
         cv2.namedWindow("window", 1)
-        ### Different states
-        #to keep track of whether the robot is holding an object or not - aka is it looking for an object or an AR tag 
-        #self.finding_color = 1
-
-        # this applies to either an object or an ar tag
-        # if 1, then we are still looking for an object or ar tag
-        # if 0, then we are 
-        #self.is_exploring = 1
+     
 
         # subscribe to the robot's RGB camera data stream
         self.image_sub = rospy.Subscriber('/camera/rgb/image_raw',
@@ -46,8 +38,6 @@ class ObjectIdentifier:
         # movement publisher 
         self.movement_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
         
-        # TODO: traffic publisher
-        #self.traffic_status_pub = rospy.Publisher("/traffic_status", Traffic)
 
         # initializing movement publishing
         self.movement = Twist(linear=Vector3(), angular=Vector3())
@@ -86,6 +76,7 @@ class ObjectIdentifier:
         # a list of dictionaries with keys 'object' and 'tag'
         self.best_policy = self.find_best_policy()
         
+        #control variables to keep track of the state the robot is in 
         self.object_found = 0
         self.object_picked_up = 0
         self.tag_found = 0
@@ -108,15 +99,19 @@ class ObjectIdentifier:
         
         print("ready")
 
+    #method for the robot to find the correct object 
     def find_object(self, color):
+        #if it finds the image 
         if self.images is not None:
             print('find object ran')
 
+            #setting the angular z value parameters found from trial and error 
             self.movement.angular.z = 0.2
             image = self.bridge.imgmsg_to_cv2(self.images,desired_encoding='bgr8')
             
             hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
             
+            #setting up the ranges for the different colored objects 
             if color == 'blue':
                 lower_bound = numpy.array([95, 90, 100]) 
                 upper_bound = numpy.array([105, 110, 150]) 
@@ -133,6 +128,7 @@ class ObjectIdentifier:
             # determines the center of the colored pixels
             M = cv2.moments(mask)
 
+            #dimensions of the image, used later for proportional control 
             h, w, d = image.shape
 
 
@@ -151,6 +147,7 @@ class ObjectIdentifier:
                 angular_k = 0.001
                 self.movement.angular.z = angular_k * angular_error
                 
+                #if the robot is within a certain tolerance of the object, then it should stop moving forward 
                 tol = 30
                 print(angular_error)
                 if abs(angular_error) < tol:
@@ -178,9 +175,7 @@ class ObjectIdentifier:
                             linear_error = slice_mean - self.min_dist_away 
                             print(linear_error) 
                             linear_k = 0.04
-                            #print('this is the linear error')
-                            #print(linear_error)
-                            #print('is starting to move forward towards goal')
+                            
                             self.movement.linear.x = linear_k * linear_error
                         
                             linear_tol = 0.20
@@ -189,8 +184,8 @@ class ObjectIdentifier:
                                 self.object_found = 1
                                 self.movement.linear.x = 0
                                 self.movement.angular.z = 0
-                        #TODO: if within tolerance, say that you are finished
-                        # ready to pick up object and then set start_moving_forward to 0 
+                        
+                        
                 else:
                     self.movement.linear.x = 0.0
                     
@@ -201,21 +196,28 @@ class ObjectIdentifier:
                 cv2.waitKey(3)
 
                 
+            #publish the movement 
             self.movement_pub.publish(self.movement) 
 
+    #now that the robot has found the object, method to pick it up 
     def pick_up_object(self):
         print('pick up object running')
+        #parameters for the gripper joint found through trial and error testing 
         gripper_joint_goal = [-0.006, -0.006]
         self.move_group_gripper.go(gripper_joint_goal, wait=True)
         self.move_group_gripper.stop()
 
+        #parameters for the arm joint found through trial and error testing 
         arm_joint_goal = [0.0, -.7, .1, -0.65]
         self.move_group_arm.go(arm_joint_goal, wait=True)
         self.move_group_arm.stop()
 
+ 
         rospy.sleep(1)
+        #updating control variables 
         self.object_picked_up = 1
 
+    #now that the robot has picked up the object, the method to find the correct AR tag 
     def find_tag(self, tag):
         print('find tag running')
         self.movement.angular.z = 0.1
@@ -231,16 +233,13 @@ class ObjectIdentifier:
         if self.images is not None:
             grayscale_image = self.bridge.imgmsg_to_cv2(self.images,desired_encoding='mono8')
             corners, ids, rejected_points = cv2.aruco.detectMarkers(grayscale_image, aruco_dict)
-            #print('ids', ids)
-            #print('corners', corners)
+            
+            #if it finds ids and corners, matching the tag from the best policy to the tag it finds 
             if ids is not None and len(corners) != 0:
                 ids = ids[0]
                 corners = corners[0]
-                #if corners:
-                #    print('first_corner',corners[0,1,:])
                 tag_idx = np.argwhere(ids == tag)
-                #print('tag_idx', tag_idx)
-                # do things with proportional control
+                #moving toward the correct tag 
                 if tag_idx.size > 0:
                     #print('found the right tag')
                     tag_idx = tag_idx[0]
@@ -256,7 +255,7 @@ class ObjectIdentifier:
                     cv2.circle(grayscale_image, (cx,cy),20,(0,0,255),-1)
                     h, w  = grayscale_image.shape
                     angular_error = ((w/2) - (cx))
- 
+                    #angular k values found through testing 
                     angular_k = 0.001
                     print(angular_error)
                     self.movement.angular.z = angular_k*angular_error
@@ -283,11 +282,9 @@ class ObjectIdentifier:
                                 self.movement.linear.x = 0
                             else:
                                 linear_error = slice_mean - self.min_dist_away 
-                                #linear_k = 0.15
-                                #print('this is the linear error')
+                                
                                 print(linear_error)
-                                #print('is starting to move forward towards goal')
-                                #self.movement.linear.x = linear_k * linear_error
+                                #setting a constant linear velocity to move towards the tag, until it reaches within a certain tolerance 
                                 self.movement.linear.x = 0.04
                                 linear_tol = 0.005
                                 if linear_error < linear_tol:
@@ -297,7 +294,7 @@ class ObjectIdentifier:
                                     self.movement.angular.z = 0
                     else:
                         self.movement.linear.x = 0.0
-                        #rospy.sleep(1)
+                     
 
             cv2.imshow("window", grayscale_image)
             cv2.waitKey(3)
@@ -305,9 +302,10 @@ class ObjectIdentifier:
 
         self.movement_pub.publish(self.movement) 
 
-
+#once the robot has found the correct tag, method to drop the object 
     def drop_object(self):
         print('drop object running')
+        #arm joint parameters found through testing 
         arm_joint_goal = [0.0, 0.4, 0.1, -0.65]
         self.move_group_arm.go(arm_joint_goal, wait=True)
         self.move_group_arm.stop()
@@ -316,6 +314,7 @@ class ObjectIdentifier:
         self.move_group_gripper.go(gripper_joint_goal, wait=True)
         self.move_group_gripper.stop()
         
+        #moving the robot back once it has dropped the object, so that there is space for it to continue spinning and find the next object 
         self.movement.linear.x = -0.1
         self.movement_pub.publish(self.movement)
         rospy.sleep(1)
@@ -323,6 +322,7 @@ class ObjectIdentifier:
         self.movement_pub.publish(self.movement)
 
         rospy.sleep(1)
+        #updating control variables 
         self.object_dropped = 1
 
     def scan_callback(self, data):
@@ -376,6 +376,7 @@ class ObjectIdentifier:
             current_action = self.best_policy[0]
             color = current_action["object"]
             tag = current_action["tag"]
+            #statements to execute the different methods 
             if not self.object_found:
                 self.find_object(color)
             elif not self.object_picked_up:
@@ -384,6 +385,7 @@ class ObjectIdentifier:
                 self.find_tag(tag)
             elif not self.object_dropped:
                 self.drop_object()
+            #popping off the list of remaining actions to take once the action has been completed 
             else:
                 self.best_policy.pop(0)
                 self.object_found = 0
