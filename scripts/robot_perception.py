@@ -8,8 +8,8 @@ import os
 # import the moveit_commander, which allows us to control the arms
 import moveit_commander
 
+# dictionary that contains the AR tags info
 aruco_dict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_4X4_50)
-
 
 
 # Path of directory on where state/action files and converged q-learning matrix is located
@@ -189,7 +189,7 @@ class ObjectIdentifier:
                 else:
                     # do not move forward if we have not detected the object and sufficiently centered towards it
                     self.movement.linear.x = 0.0
-            
+                # to visualize the robot localizing to objects
                 cv2.imshow("window", image)
                 cv2.waitKey(3)
 
@@ -305,7 +305,7 @@ class ObjectIdentifier:
                                     self.movement.angular.z = 0
                     else:
                         self.movement.linear.x = 0.0
-                     
+            # to visualize the robot localizing to tags         
             cv2.imshow("window", grayscale_image)
             cv2.waitKey(3)
 
