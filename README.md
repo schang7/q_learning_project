@@ -35,27 +35,39 @@ We determined our q matrix had converged by comparing the calculated q values in
 - Robot perception description: Describe how you accomplished each of the following components of the perception elements of this project in 1-3 sentences, any online sources of information/code that helped you to recognize the objects, and also describe what functions / sections of the code executed each of these components (1-3 sentences per function / portion of code):
 
 - Identifying the locations and identities of each of the colored objects
+
+
   **Description**: We first had the robot spin around until it found an object that was within the optimal hsv range for one of the three color identities it would be looking for depending on the action being executed in the best policy (pink, green, or blue). We found these ranges through online color picker applications and also by putting the objects in front of the camera and observing the reported hsv values. We then created a mask to remove all the color pixel values that were not in the range of the color we were considering and found the central location of the desired color pixels’ in the image. This central location was considered to be the location of the colored object.
     **Location**: within robot_perception.py, the find_object method in the ObjectIdentifier class.
   
 - Identifying the locations and identities of each of the AR tags
+
+
   **Description**: We programmed the robot such that it turns around until it detects the desired AR tag id within the ARUCO library, and then moves to the AR tag using proportional control. We detected the correct AR tag by matching the id of a detected tag with the corresponding tag from the action output of our converged Q Matrix. 
     **Location**: find_tag method in robot_perception.py 
 
 - Robot manipulation and movement: Describe how you accomplished each of the following components of the robot manipulation and movement elements of this project in 1-3 sentences, and also describe what functions / sections of the code executed each of these components (1-3 sentences per function / portion of code):
 - Moving to the right spot in order to pick up a colored object
+
+
   **Description**: We used proportional control to angle the robot towards the location of the object (central location of the pink/blue/green pixels) so that the robot faced the object head on. If the front of the robot (0 degrees) faced the object within a certain angular tolerance from the object, we considered it as facing the object and initiated forward linear movement towards it using proportional control. We used LIDAR scan range data from within 8 degrees of the front of the robot to see how far away it was from the object, and if it was close enough within a certain tolerance such that the object would be inside the gripper, we stopped all movement. 
    **Location**: find_object method in robot_perception.py
   
 - Picking up the colored object
+
+
   **Description**: We tested out different joint angle and gripper width configurations using the manipulation GUI to see how the arm should be positioned to pick up the object. The robot is initially set to have its arm extended in front of it (without blocking the LIDAR) and gripper wide open. Once the robot was positioned such that the object was inside this gripper, we initiated movements that closed the gripper to grab the object and lift the arm up so that the object is high in the air (so that nothing interferes with the LiDAR scan). 
   **Location**: pick_up_object method in robot_perception.py
 
 - Moving to the desired destination (AR tag) with the colored object
+
+
   **Description**: While the arm was still gripping the object we had the robot turn around and then identify the corresponding AR tag. We used proportional control again to angle the robot towards the correct AR tag so that it would face it head on, but this time initiated constant linear movement (not using proportional control) towards the object if the front of the robot was within an angular tolerance from the center of the AR tag. Once the robot got close enough to the AR tag within a set linear distance tolerance, we stopped all movement. 
   **Location**: find_tag method in robot_perception.py
 
 - Putting the colored object back down at the desired destination
+
+
   **Description**: We had the robot first lower its arm back to its initial position (extended outwards) and let the program sleep for a second to make sure all the joint arm movements were executed. We then made the gripper open up again while also having the robot linearly move backwards for one second so that it would let go of the object, and then get the object out of the vicinity of the gripper so that when it starts exploring for another colored object, it does not knock the other one over. 
   **Location**: drop_object method in robot_perception.py
 
