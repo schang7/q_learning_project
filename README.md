@@ -91,6 +91,10 @@ We determined our q matrix had converged by comparing the calculated q values in
 ## Video of the program running
 
 
+https://user-images.githubusercontent.com/65791750/168212855-c622305f-5003-4afe-a011-87e4d3f0f8c1.mp4
+
+
+
 Implementation plan:
 The names of your team members:
 Suha Chang
