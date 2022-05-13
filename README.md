@@ -1,78 +1,82 @@
 # q_learning_project
 
-Part 2 Write Up: 
 
-Please note: Ana worked on it till her late hours were over (till Thursday at 11 am), and Suha worked on editing the write up for the remainder of her late hours. 
+## Part 1 Writeup
 
+### Objectives description, high-level description, Q-learning algorithm description
+
+- Objectives description (2-3 sentences): Describe the goal of this project.:
+
+  To implement a Q-Learning algorithm that gives the robot the ability to organize objects in a given environment. Our goal is to train our Q-Matrix using reinforcement learning, and stopping when we have a converged Q-matrix that will be used to guide the robot to execute the best set of actions in placing different colored objects in front of corresponding AR tags in space. 
+
+- High-level description (1 paragraph): At a high-level, describe how you used reinforcement learning to solve the task of determining which colored objects belong in front of each AR tag.:
+
+  We used reinforcement learning in the Q-learning algorithm. For each iteration of the Q-learning algorithm, we randomly chose an action of moving one of three colored objects (pink, blue, and green) to one of three AR tags. After performing this action, we received a reward that would result from placing the objects in the post-action state (which was either 0 or +100; +100 corresponds to when all three objects are all placed in front of the correct tags). We used this reward to calculate the q-value using the Bellman Equation. In this equation, we set our learning rate to 1 and our discount factor to 0.1. We then updated the Q-matrix with this calculated q-value. We determined convergence of the q matrix by a rule that compared the difference between consecutive q-values, and if the difference was negligible for a certain number of iterations, we determined that the Q Matrix had converged. This converged Q-matrix allows us to use reinforcement learning to determine the best set of actions the robot should take to perform a goal because we will ultimately use it to find the best set of actions (a best policy) that maximizes the reward obtained.
+  
+- Q-learning algorithm description: Describe how you accomplished each of the following components of the Q-learning algorithm in 1-3 sentences, and also describe what functions / sections of the code executed each of these components (1-3 sentences per function / portion of code):
+- 1) Selecting and executing actions for the robot (or phantom robot) to take
+We took the current state at the beginning of the q-learning iteration and found all valid potential next states that could be attained (given the current state) using the action_matrix. We then randomly selected one state from this array of potential next valid states, and found the corresponding action that would get us to that state. If there are no valid next states to take from the current state (i.e. all three objects are in front of a tag), then there are no valid states and we reset the current state to be 0 (corresponding to when all three objects are at the origin). 
+  Location: Lines 85-103, 168-172 (for going back to origin if we’ve reached an end state) 
+
+- 2) Updating the Q-matrix:
+In order to update the Q matrix, we first found the Q matrix entries corresponding to all actions (columns) given the chosen future state (row), which is stored in max_Q_Candidates. We then took the max Q-value from all these entries (max_Q). We then used this as the Q(S_t+1, at) input in the Bellman Equation, and along with the reward we obtained from performing the action and our discount factor parameter, we calculated the Q value of (S_t, a_t). We then updated the corresponding element of the Q matrix to this value. 
+  Location: Lines 123-136 
+
+- 3) Determining when to stop iterating through the Q-learning algorithm
+We determined our q matrix had converged by comparing the calculated q values in consecutive iterations. (abs(q_value-current_q_value)). If the difference between these q values was less than some tolerance level, n times consecutively, then we determined that the Q matrix was not being updated significantly and so it had converged. In testing for optimizing our parameters, we found that in our best iteration, the q matrix converged in 6700 iterations, after the q_value remained unchanged for 60 iterations total. Thus, we set our upper bound for the number of consecutive iterations the q matrix should remain unchanged for, to be 60. This determined that our q matrix converged, and we tested this by manually confirming that the best policy in the converged q-matrix csv file led to the goal state.
+  Location: Lines 155-162 
+
+## Part 2 Write Up: 
 - Executing the path most likely to lead to receiving a reward after the Q-matrix has converged on the simulated Turtlebot3 robot
-  Description:	 For finding the policy, we first check if the Q matrix has reached its final state which is if all the q values are equal. If it has, then we set a flag reached_final_state to 1. To find the correct tags that match the correct objects
-  Location: find_best_policy in robot_perception.py
+  
+**Description**: For finding the policy, we started at the index of the origin state (where all objects are not placed in front of any tags). We found the row in the converged Q-matrix which corresponded to that state and then found the column at which it had the maximum q-value, which was the next best action to take in the policy. We stored that action and updated the current state to a new state that the environment would be in after executing that action and found the next best action until all the q-values were equal in a given row (which means we have reached the final action). We stored this into a list and ran through each action (putting an object in front of a given tag) in our run function, popping off actions in the list after they were succesfully executed. 
+  **Location**: find_best_policy in robot_perception.py
   
 - Robot perception description: Describe how you accomplished each of the following components of the perception elements of this project in 1-3 sentences, any online sources of information/code that helped you to recognize the objects, and also describe what functions / sections of the code executed each of these components (1-3 sentences per function / portion of code):
 
 - Identifying the locations and identities of each of the colored objects
-  Location: within robot_perception.py, the find_object method in the object_identifier class
-  Description: We first had the robot spin around until it found an object that was within the optimal hsv range for one of the three color identities it would be looking for depending on the action being executed in the best policy (pink, green, or blue). We found these ranges through online color picker applications and also by putting the objects in front of the camera and observing the reported hsv values. We then created a mask to remove all the color pixel values that were not in the range of the color we were considering and found the central location of the desired color pixels’ in the image. This central location was considered to be the location of the colored object.
+  **Description**: We first had the robot spin around until it found an object that was within the optimal hsv range for one of the three color identities it would be looking for depending on the action being executed in the best policy (pink, green, or blue). We found these ranges through online color picker applications and also by putting the objects in front of the camera and observing the reported hsv values. We then created a mask to remove all the color pixel values that were not in the range of the color we were considering and found the central location of the desired color pixels’ in the image. This central location was considered to be the location of the colored object.
+    **Location**: within robot_perception.py, the find_object method in the ObjectIdentifier class.
   
 - Identifying the locations and identities of each of the AR tags
-  Location: find_tag method in robot_perception.py 
-  Description: We programmed the robot such that it detects the corresponding AR tag id, and then moves to the AR tag using proportional control. We detected the correct AR tag by matching the id of a detected tag with the correct tag from the action output of our converged Q Matrix. Once it finds the correct AR tag, it moves towards it until it’s within a set linear distance tolerance. 
-  
+  **Description**: We programmed the robot such that it turns around until it detects the desired AR tag id within the ARUCO library, and then moves to the AR tag using proportional control. We detected the correct AR tag by matching the id of a detected tag with the corresponding tag from the action output of our converged Q Matrix. 
+    **Location**: find_tag method in robot_perception.py 
+
 - Robot manipulation and movement: Describe how you accomplished each of the following components of the robot manipulation and movement elements of this project in 1-3 sentences, and also describe what functions / sections of the code executed each of these components (1-3 sentences per function / portion of code):
-  Moving to the right spot in order to pick up a colored object
-  Location: find_object method in robot_perception.py
-  Description: We used proportional control to angle the robot towards the location of the object (central location of the pink/blue/green pixels) so that the robot faced the object head on. If the front of the robot (0 degrees) faced the object within a certain angular tolerance from the object, we considered it as facing the object and initiated forward linear movement towards it using proportional control. We used LIDAR scan range data from within _8_ degrees of the front of the robot to see how far away it was from the object, and if it was close enough within a certain tolerance such that the object was inside the gripper, we stopped all movement. 
+- Moving to the right spot in order to pick up a colored object
+  **Description**: We used proportional control to angle the robot towards the location of the object (central location of the pink/blue/green pixels) so that the robot faced the object head on. If the front of the robot (0 degrees) faced the object within a certain angular tolerance from the object, we considered it as facing the object and initiated forward linear movement towards it using proportional control. We used LIDAR scan range data from within 8 degrees of the front of the robot to see how far away it was from the object, and if it was close enough within a certain tolerance such that the object would be inside the gripper, we stopped all movement. 
+   **Location**: find_object method in robot_perception.py
   
 - Picking up the colored object
-  Location: pick_up_object method in robot_perception.py
-  Description: We tested out different joint angle and gripper width configurations using the moveit GUI to see how the arm should be positioned to pick up the object. The robot is initially set to have its arm extended in front of it (without blocking the LIDAR) and gripper wide open. Once the robot was positioned such that the object was inside this gripper, we initiated movements that closed the gripper to grab the object and lift the arm up so that the object is high in the air (does not interfere with the LiDAR scan). 
-  
+  **Description**: We tested out different joint angle and gripper width configurations using the manipulation GUI to see how the arm should be positioned to pick up the object. The robot is initially set to have its arm extended in front of it (without blocking the LIDAR) and gripper wide open. Once the robot was positioned such that the object was inside this gripper, we initiated movements that closed the gripper to grab the object and lift the arm up so that the object is high in the air (so that nothing interferes with the LiDAR scan). 
+  **Location**: pick_up_object method in robot_perception.py
+
 - Moving to the desired destination (AR tag) with the colored object
-  Location: find_tag method in robot_perception.py
-  Description: While the arm was still gripping the object we had the robot turn around and then identify the corresponding AR tag. We used proportional control again to angle the robot towards the correct AR tag so that it would face it head on, but this time initiated constant linear movement towards the object if the front of the robot was within an angular tolerance from the center of the AR tag. Once the robot got close enough to the AR tag within a set linear distance tolerance, we stopped all movement. 
-  
+  **Description**: While the arm was still gripping the object we had the robot turn around and then identify the corresponding AR tag. We used proportional control again to angle the robot towards the correct AR tag so that it would face it head on, but this time initiated constant linear movement (not using proportional control) towards the object if the front of the robot was within an angular tolerance from the center of the AR tag. Once the robot got close enough to the AR tag within a set linear distance tolerance, we stopped all movement. 
+  **Location**: find_tag method in robot_perception.py
+
 - Putting the colored object back down at the desired destination
-  Location: drop_object method in robot_perception.py
-  Description: We had the robot first lower its arm back to its initial position (extended outwards) and let the program sleep for a second to make sure the joint arm movements were executed. We then made the gripper open up again while also having the robot linearly move backwards for one second so that it would let go of the object, and then get the object out of the vicinity of the gripper so that when it starts exploring for another colored object., it does not knock the other one over. 
-  
-Challenges (1 paragraph): Describe the challenges you faced and how you overcame them.
+  **Description**: We had the robot first lower its arm back to its initial position (extended outwards) and let the program sleep for a second to make sure all the joint arm movements were executed. We then made the gripper open up again while also having the robot linearly move backwards for one second so that it would let go of the object, and then get the object out of the vicinity of the gripper so that when it starts exploring for another colored object, it does not knock the other one over. 
+  **Location**: drop_object method in robot_perception.py
+
+ 
+### Challenges (1 paragraph): Describe the challenges you faced and how you overcame them.
 
 - A persistent challenge we had was our measurements in general being very noisy or laggy. For instance, our LIDAR scan was noisy so we continuously had to modify our parameters in the proportional control to ensure the robot reaches the correct distance away from the objects to pick it up (e.g. changing the range of degrees considered for the lidar scan, updating the angular or linear tolerances, decreasing our k-values to make updates slower and more precise). 
-- For the camera, the images would often be very laggy such that the correct actions were not initiated in time and the color measurements would be impacted by other objects in the real world environment. We overcame this by conducting our tests in a space closer to the intro_robo wifi connection and controlling our environment by ensuring no other colors were in the view of the robot. Continuing from above, the presence of noise in detecting the AR tag was also an issue. We overcame this by moving the robot slower while it was turning to explore the different tags and making it move sooner towards the tag in the forwards linear direction if it had detected it (by increasing the angular tolerance for find_tag) because the detection quality would get better as the robot got closer.  
+- For the camera, the images would often be very laggy such that the correct actions were not initiated in time and the color measurements would be impacted by other objects in the real world environment. We overcame this by conducting our tests in a space closer to the intro_robo wifi connection and controlling our environment by ensuring no other colors were in the view of the robot. Continuing from above, the presence of noise in detecting the AR tag was also an issue. We overcame this by moving the robot slower while it was turning to explore the different tags and making it move sooner towards the tag in the forwards linear direction if it had detected it (by increasing the angular tolerance for find_tag) because the detection ability would get better as the robot got closer.  
 - For the big picture, figuring out how to structure our code in enacting different modular step of robot movement was a challenge we faced at first. We first wrote logic within callback functions for LIDAR scan and image receiving topics but realized that it was too complicated, so we wrote them in separate functions and were able to figure out a sound logic for executing each action within the run function. 
 
-Future work (1 paragraph): If you had more time, how would you improve your implementation?
-- We would make our logic more robust to noise and include faster movements, since we had to make things a bit slower in order to make sure that it properly recognized and moved towards objects due to the noise. One idea that could help with recognition issues would be to have the robot go back to the center using odometry information after it correctly picks up an object or drops it off at a tag so that it is easy
+### Future work (1 paragraph): If you had more time, how would you improve your implementation?
+- We would make our logic more robust to noise and include faster movements, since we had to make things a bit slower in order to make sure that it properly recognized and moved towards objects due to the noise. One idea that could help with recognition issues would be to have the robot go back to the center using odometry information after it correctly picks up an object or drops it off at a tag so that it detects either colored objects or tags more easily.
 - Also, for our q-learning portion our algorithm converged a bit slowly. The reason why is because we included sleeps in our logic to make sure that the correct reward was being published and received after different actions (since shorter sleeps led to the program receiving the wrong rewards). However, we would improve the q-learning implementation by having the q-values for the Q-matrix be calculated within the callback function that receives the rewards and use booleans to detect whether updates to the matrix had been made so that we would avoid having to handle so many sleep statements. 
 
-Takeaways (at least 2 bullet points with 2-3 sentences per bullet point): What are your key takeaways from this project that would help you/others in future robot programming assignments working in pairs? For each takeaway, provide a few sentences of elaboration.
+### Takeaways (at least 2 bullet points with 2-3 sentences per bullet point): What are your key takeaways from this project that would help you/others in future robot programming assignments working in pairs? For each takeaway, provide a few sentences of elaboration.
 
 - One key takeaway was how to create modular structure for code in logical ways. Since this project had so many moving parts, it gave us experience in breaking down a large objective into smaller goals, and tackling them one at a time. This will be especially useful for the team final project, where we might be implementing different interesting modules for our project and can divide and conquer for writing and managing different types of algorithms.
 - Incorporating arm control was another key takeaway of the project. We learned that a lot of pick-up/drop-off movements can be perfected by tweaking the gripper joint parameters and gained experience in learning about how different joint angles affect the position of the robot arm. This will help in future projects where we hope to use the robot arm for dextrous movements that allow you to pick up and manipulate things in the environment. 
 - Another key takeaway from this project was again the importance of accounting for noise in real-world applications of robotics and budgeting time for optimizing parameters. As we gain more experience in implementing complex forms of color/object/distance recognition, sensor measurements play a greater role in robot control and we will need to be experienced in handling noise in these situations. 
 
-
-Part 1 Writeup
-
-Objectives description, high-level description, Q-learning algorithm description
-
-Objectives description (2-3 sentences): Describe the goal of this project.:
-To implement a Q-Learning algorithm that gives the robot the ability to organize objects in a given environment. The goal of this intermediate deliverable specifically is to train our Q-Matrix using reinforcement learning, and stopping when we have a converged Q-matrix that will be used to guide the robot to execute the best set of actions to perform the object organization goal in the 2nd part of the project. 
-
-High-level description (1 paragraph): At a high-level, describe how you used reinforcement learning to solve the task of determining which colored objects belong in front of each AR tag.:
-  We used reinforcement learning in the Q-learning algorithm. For each iteration of the Q-learning algorithm, we randomly chose an action of moving one of three colored objects (pink, blue, and green) to one of three AR tags. After performing this action, we received a reward that would result from placing the objects in the post-action state (which was either 0 or +100; +100 corresponds to when all three objects are all placed in front of the correct tags). We used this reward to calculate the q-value using the Bellman Equation. In this equation, we set our learning rate to 1 and our discount factor to 0.1. We then updated the Q-matrix with this calculated q-value. We determined convergence of the q matrix by a rule that compared the difference between consecutive q-values, and if the difference was negligible for a certain number of iterations, we determined that the Q Matrix had converged. This converged Q-matrix allows us to use reinforcement learning to determine the best set of actions the robot should take to perform a goal because we will ultimately use it to find the best set of actions (a best policy) that maximizes the reward obtained.
-  
-Q-learning algorithm description: Describe how you accomplished each of the following components of the Q-learning algorithm in 1-3 sentences, and also describe what functions / sections of the code executed each of these components (1-3 sentences per function / portion of code):
-1) Selecting and executing actions for the robot (or phantom robot) to take
-We took the current state at the beginning of the q-learning iteration and found all valid potential next states that could be attained (given the current state) using the action_matrix. We then randomly selected one state from this array of potential next valid states, and found the corresponding action that would get us to that state. If there are no valid next states to take from the current state (i.e. all three objects are in front of a tag), then there are no valid states and we reset the current state to be 0 (corresponding to when all three objects are at the origin). 
-  Location: Lines 85-103, 168-172 (for going back to origin if we’ve reached an end state) 
-2) Updating the Q-matrix:
-In order to update the Q matrix, we first found the Q matrix entries corresponding to all actions (columns) given the chosen future state (row), which is stored in max_Q_Candidates. We then took the max Q-value from all these entries (max_Q). We then used this as the Q(S_t+1, at) input in the Bellman Equation, and along with the reward we obtained from performing the action and our discount factor parameter, we calculated the Q value of (S_t, a_t). We then updated the corresponding element of the Q matrix to this value. 
-  Location: Lines 123-136 
-3) Determining when to stop iterating through the Q-learning algorithm
-We determined our q matrix had converged by comparing the calculated q values in consecutive iterations. (abs(q_value-current_q_value)). If the difference between these q values was less than some tolerance level, n times consecutively, then we determined that the Q matrix was not being updated significantly and so it had converged. In testing for optimizing our parameters, we found that in our best iteration, the q matrix converged in 6700 iterations, after the q_value remained unchanged for 60 iterations total. Thus, we set our upper bound for the number of consecutive iterations the q matrix should remain unchanged for, to be 60. This determined that our q matrix converged, and we tested this by manually confirming that the best policy in the converged q-matrix csv file led to the goal state.
-  Location: Lines 155-162 
-
+## Video of the program running
 
 
 Implementation plan:
